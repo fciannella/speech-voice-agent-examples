@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglx-mesa0 \
     curl \
+    wget \
     ca-certificates \
     ffmpeg \
     git \
@@ -30,12 +31,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir --upgrade pip uv
 
-# Create non-root user (UID 1000) for provider runtime
+# Create non-root user (UID 1000) for provider runtime (container will run as UID 1000 on provider)
 RUN useradd -m -u 1000 user
 ENV HOME=/home/user
 ENV PATH=$HOME/.local/bin:$PATH
 ENV XDG_CACHE_HOME=$HOME/.cache
-USER user
 
 # App directory setup
 WORKDIR /app
