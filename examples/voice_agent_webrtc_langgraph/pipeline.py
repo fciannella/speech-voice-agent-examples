@@ -81,72 +81,88 @@ ice_servers = (
 
 @app.get("/assistants")
 async def list_assistants(request: Request):
-    """Proxy: list assistants from LangGraph server with IDs and basic details.
-    Returns a list of objects {assistant_id, graph_id, name, description} when available.
+    """Return a list of assistants from LangGraph, with robust fallbacks.
+
+    Output: List of {assistant_id, graph_id?, name?, description?, display_name}.
     """
     import requests
 
     base_url = os.getenv("LANGGRAPH_BASE_URL", "http://127.0.0.1:2024").rstrip("/")
 
-    # Build auth header: prefer inbound request Authorization, else env token
     inbound_auth = request.headers.get("authorization")
     token = os.getenv("LANGGRAPH_AUTH_TOKEN") or os.getenv("AUTH0_ACCESS_TOKEN") or os.getenv("AUTH_BEARER_TOKEN")
     headers = {"Authorization": inbound_auth} if inbound_auth else ({"Authorization": f"Bearer {token}"} if token else None)
 
-    # Search for assistant IDs
+    def normalize_entries(raw_items: list) -> list[dict]:
+        results: list[dict] = []
+        for entry in raw_items:
+            assistant_id = None
+            if isinstance(entry, dict):
+                assistant_id = entry.get("assistant_id") or entry.get("id") or entry.get("name")
+            elif isinstance(entry, str):
+                assistant_id = entry
+            if not assistant_id:
+                continue
+            results.append({"assistant_id": assistant_id, **(entry if isinstance(entry, dict) else {})})
+        return results
+
+    # Try GET /assistants first (newer servers)
+    items: list[dict] = []
     try:
-        search_resp = requests.post(
-            f"{base_url}/assistants/search",
-            json={
-                "metadata": {},
-                "limit": 100,
-                "offset": 0,
-                "sort_by": "assistant_id",
-                "sort_order": "asc",
-                "select": ["assistant_id"],
-            },
-            timeout=10,
-            headers=headers,
-        )
-        search_resp.raise_for_status()
+        get_resp = requests.get(f"{base_url}/assistants", params={"limit": 100}, timeout=8, headers=headers)
+        if get_resp.ok:
+            data = get_resp.json() or []
+            if isinstance(data, dict):
+                data = data.get("items") or data.get("results") or data.get("assistants") or []
+            items = normalize_entries(data)
     except Exception as exc:  # noqa: BLE001
-        logger.error(f"Failed to query assistants/search: {exc}")
-        return JSONResponse(status_code=502, content={"error": "assistants_search_failed"})
+        logger.warning(f"GET /assistants failed: {exc}")
 
-    items = []
-    try:
-        ids = search_resp.json() or []
-        if isinstance(ids, dict):  # some servers may wrap the list
-            ids = ids.get("items") or ids.get("results") or []
-    except Exception:  # noqa: BLE001
-        ids = []
-
-    for entry in ids:
-        assistant_id = None
-        if isinstance(entry, dict):
-            assistant_id = entry.get("assistant_id") or entry.get("id")
-        elif isinstance(entry, str):
-            assistant_id = entry
-        if not assistant_id:
-            continue
-        # Fetch details for each assistant id (best-effort)
-        detail = {"assistant_id": assistant_id}
+    # Fallback: POST /assistants/search (older servers)
+    if not items:
         try:
-            detail_resp = requests.get(f"{base_url}/assistants/{assistant_id}", timeout=5, headers=headers)
-            if detail_resp.ok:
-                d = detail_resp.json() or {}
-                detail.update(
-                    {
-                        "graph_id": d.get("graph_id"),
-                        "name": d.get("name"),
-                        "description": d.get("description"),
-                        "metadata": d.get("metadata") or {},
-                    }
-                )
-        except Exception:
-            pass
-        # Compute a friendly display name
-        md = detail.get("metadata") or {}
+            search_resp = requests.post(
+                f"{base_url}/assistants/search",
+                json={
+                    "metadata": {},
+                    "limit": 100,
+                    "offset": 0,
+                    "sort_by": "assistant_id",
+                    "sort_order": "asc",
+                    "select": ["assistant_id"],
+                },
+                timeout=10,
+                headers=headers,
+            )
+            if search_resp.ok:
+                data = search_resp.json() or []
+                if isinstance(data, dict):
+                    data = data.get("items") or data.get("results") or []
+                items = normalize_entries(data)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"POST /assistants/search failed: {exc}")
+
+    # Best-effort: enrich with details when possible
+    enriched: list[dict] = []
+    for item in items:
+        detail = dict(item)
+        assistant_id = detail.get("assistant_id")
+        if assistant_id:
+            try:
+                detail_resp = requests.get(f"{base_url}/assistants/{assistant_id}", timeout=5, headers=headers)
+                if detail_resp.ok:
+                    d = detail_resp.json() or {}
+                    detail.update(
+                        {
+                            "graph_id": d.get("graph_id"),
+                            "name": d.get("name"),
+                            "description": d.get("description"),
+                            "metadata": d.get("metadata") or {},
+                        }
+                    )
+            except Exception:
+                pass
+        md = (detail.get("metadata") or {}) if isinstance(detail.get("metadata"), dict) else {}
         display_name = (
             detail.get("name")
             or md.get("display_name")
@@ -155,9 +171,25 @@ async def list_assistants(request: Request):
             or detail.get("assistant_id")
         )
         detail["display_name"] = display_name
-        items.append(detail)
+        enriched.append(detail)
 
-    return items
+    # Final fallback: read local graphs from agents/langgraph.json
+    if not enriched:
+        try:
+            config_path = Path(__file__).parent / "agents" / "langgraph.json"
+            with open(config_path, encoding="utf-8") as f:
+                cfg = json.load(f) or {}
+            graphs = (cfg.get("graphs") or {}) if isinstance(cfg, dict) else {}
+            for graph_id in graphs.keys():
+                enriched.append({
+                    "assistant_id": graph_id,
+                    "graph_id": graph_id,
+                    "display_name": graph_id,
+                })
+        except Exception as exc:  # noqa: BLE001
+            logger.error(f"Failed to read local agents/langgraph.json: {exc}")
+
+    return enriched
 
 async def run_bot(webrtc_connection, ws: WebSocket, assistant_override: str | None = None):
     """Run the voice agent bot with WebRTC connection and WebSocket.
