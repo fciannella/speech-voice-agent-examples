@@ -11,6 +11,11 @@ fi
 
 # If a remote prompt URL is provided, download it and export ZERO_SHOT_AUDIO_PROMPT
 if [ -n "${ZERO_SHOT_AUDIO_PROMPT_URL:-}" ]; then
+    case "$ZERO_SHOT_AUDIO_PROMPT_URL" in
+        *"github.com"*"/blob"*)
+            ZERO_SHOT_AUDIO_PROMPT_URL="${ZERO_SHOT_AUDIO_PROMPT_URL}?raw=1"
+            ;;
+    esac
     PROMPT_TARGET="${ZERO_SHOT_AUDIO_PROMPT:-/app/examples/voice_agent_webrtc_langgraph/audio_prompt.wav}"
     mkdir -p "$(dirname "$PROMPT_TARGET")"
     if [ ! -f "$PROMPT_TARGET" ]; then

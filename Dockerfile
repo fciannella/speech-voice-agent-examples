@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglx-mesa0 \
     curl \
+    ca-certificates \
     ffmpeg \
     git \
     net-tools \
@@ -29,18 +30,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir --upgrade pip uv
 
+# Create non-root user (UID 1000) for provider runtime
+RUN useradd -m -u 1000 user
+ENV HOME=/home/user
+ENV PATH=$HOME/.local/bin:$PATH
+ENV XDG_CACHE_HOME=$HOME/.cache
+USER user
+
 # App directory setup
 WORKDIR /app
 
 # App files
-COPY pyproject.toml uv.lock \
+COPY --chown=user pyproject.toml uv.lock \
      LICENSE README.md NVIDIA_PIPECAT.md \
      ./
-COPY src/ ./src/
-COPY examples/voice_agent_webrtc_langgraph/ ./examples/voice_agent_webrtc_langgraph/
+COPY --chown=user src/ ./src/
+COPY --chown=user examples/voice_agent_webrtc_langgraph/ ./examples/voice_agent_webrtc_langgraph/
 
 # Copy built UI into example directory so FastAPI can serve it
-COPY --from=ui-builder /ui/dist /app/examples/voice_agent_webrtc_langgraph/ui/dist
+COPY --from=ui-builder --chown=user /ui/dist /app/examples/voice_agent_webrtc_langgraph/ui/dist
 
 # Example app directory
 WORKDIR /app/examples/voice_agent_webrtc_langgraph
