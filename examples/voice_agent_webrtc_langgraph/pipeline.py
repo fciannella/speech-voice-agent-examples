@@ -452,6 +452,30 @@ if UI_DIST_DIR.exists():
     app.mount("/", StaticFiles(directory=str(UI_DIST_DIR), html=True), name="static")
 
 
+@app.get("/rtc-config")
+async def rtc_config():
+    """Expose browser RTC ICE configuration based on environment variables.
+
+    Reads TURN_SERVER_URL, TURN_USERNAME, TURN_PASSWORD and returns a structure
+    consumable by the browser: { "iceServers": [ { urls, username?, credential? } ] }.
+    Always includes a public STUN as a fallback.
+    """
+    ice_servers: list[dict] = []
+    turn_url = os.getenv("TURN_SERVER_URL") or os.getenv("TURN_URL")
+    turn_user = os.getenv("TURN_USERNAME") or os.getenv("TURN_USER")
+    turn_pass = os.getenv("TURN_PASSWORD") or os.getenv("TURN_PASS")
+    if turn_url:
+        server: dict = {"urls": turn_url}
+        if turn_user:
+            server["username"] = turn_user
+        if turn_pass:
+            server["credential"] = turn_pass
+        ice_servers.append(server)
+    # Public STUN fallback to aid connectivity when TURN is not provided
+    ice_servers.append({"urls": "stun:stun.l.google.com:19302"})
+    return {"iceServers": ice_servers}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="WebRTC demo")
     parser.add_argument("--host", default="0.0.0.0", help="Host for HTTP server (default: localhost)")

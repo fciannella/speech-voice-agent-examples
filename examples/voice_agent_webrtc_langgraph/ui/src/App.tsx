@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { AudioStream } from "./AudioStream";
 import { AudioWaveForm } from "./AudioWaveForm";
 import { Toaster } from "./components/ui/sonner";
-import { RTC_CONFIG, RTC_OFFER_URL, DYNAMIC_PROMPT, POLL_PROMPT_URL, ASSISTANTS_URL } from "./config";
+import { RTC_OFFER_URL, DYNAMIC_PROMPT, POLL_PROMPT_URL, ASSISTANTS_URL } from "./config";
 import usePipecatWebRTC from "./hooks/use-pipecat-webrtc";
 import { Transcripts } from "./Transcripts";
 import WebRTCButton from "./WebRTCButton";
@@ -19,10 +19,11 @@ function App() {
   const [assistants, setAssistants] = useState<Array<{ assistant_id: string; name?: string | null; graph_id?: string | null; display_name?: string | null }>>([]);
   const [selectedAssistant, setSelectedAssistant] = useState<string | null>(null);
   const [selectedAssistantName, setSelectedAssistantName] = useState<string>("Speech to Speech Demo");
+  const [rtcConfig, setRtcConfig] = useState<ConstructorParameters<typeof RTCPeerConnection>[0]>({});
   
   const webRTC = usePipecatWebRTC({
     url: RTC_OFFER_URL,
-    rtcConfig: RTC_CONFIG,
+    rtcConfig,
     onError: (e) => toast.error(e.message),
     assistant: selectedAssistant,
   });
@@ -75,6 +76,23 @@ function App() {
       }
     };
     fetchAssistants();
+  }, []);
+
+  // Fetch ICE configuration for RTC
+  useEffect(() => {
+    const fetchRtcConfig = async () => {
+      try {
+        const res = await fetch("/rtc-config");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setRtcConfig(data || {});
+      } catch (e) {
+        console.warn("Failed to fetch rtc-config", e);
+        // Fallback STUN if server not available
+        setRtcConfig({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      }
+    };
+    fetchRtcConfig();
   }, []);
 
   // Send current prompt IMMEDIATELY when WebRTC connection is established
