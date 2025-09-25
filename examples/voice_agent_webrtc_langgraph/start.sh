@@ -35,7 +35,7 @@ LANGGRAPH_PID=""
 if [ -d "$LANGGRAPH_DIR" ]; then
     LG_HOST="${LANGGRAPH_HOST:-0.0.0.0}"
     LANGGRAPH_PORT="${LANGGRAPH_PORT:-2024}"
-    sh -c "cd \"$LANGGRAPH_DIR\" && exec uv run langgraph dev --host \"$LG_HOST\" --port \"$LANGGRAPH_PORT\"" &
+    sh -c "cd \"$LANGGRAPH_DIR\" && exec uv run langgraph dev --no-browser --host \"$LG_HOST\" --port \"$LANGGRAPH_PORT\"" &
     LANGGRAPH_PID=$!
 fi
 
