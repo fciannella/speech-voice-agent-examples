@@ -446,12 +446,7 @@ async def get_prompt():
         "description": "Prompt and persona are managed by the LangGraph agent.",
     }
 
-# Serve static UI (if bundled) after API/WebSocket routes so they still take precedence
-UI_DIST_DIR = Path(__file__).parent / "ui" / "dist"
-if UI_DIST_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(UI_DIST_DIR), html=True), name="static")
-
-
+# RTC config endpoint must be registered before mounting static at "/"
 @app.get("/rtc-config")
 async def rtc_config():
     """Expose browser RTC ICE configuration based on environment variables.
@@ -474,6 +469,12 @@ async def rtc_config():
     # Public STUN fallback to aid connectivity when TURN is not provided
     ice_servers.append({"urls": "stun:stun.l.google.com:19302"})
     return {"iceServers": ice_servers}
+
+
+# Serve static UI (if bundled) after API/WebSocket routes so they still take precedence
+UI_DIST_DIR = Path(__file__).parent / "ui" / "dist"
+if UI_DIST_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(UI_DIST_DIR), html=True), name="static")
 
 
 if __name__ == "__main__":
