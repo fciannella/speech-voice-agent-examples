@@ -66,4 +66,6 @@ pnpm-debug.log*
 # --- Example runtime artifacts ---
 examples/voice_agent_webrtc_langgraph/audio_dumps/
 examples/voice_agent_webrtc_langgraph/ui/dist/
+examples/voice_agent_webrtc_langgraph/audio_prompt.wav
+tests/perf/audio_files/*.wav
 

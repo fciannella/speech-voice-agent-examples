@@ -9,6 +9,19 @@ if [ -f "/app/examples/voice_agent_webrtc_langgraph/.env" ]; then
     set +a
 fi
 
+# If a remote prompt URL is provided, download it and export ZERO_SHOT_AUDIO_PROMPT
+if [ -n "${ZERO_SHOT_AUDIO_PROMPT_URL:-}" ]; then
+    PROMPT_TARGET="${ZERO_SHOT_AUDIO_PROMPT:-/app/examples/voice_agent_webrtc_langgraph/audio_prompt.wav}"
+    mkdir -p "$(dirname "$PROMPT_TARGET")"
+    if [ ! -f "$PROMPT_TARGET" ]; then
+        echo "Downloading ZERO_SHOT_AUDIO_PROMPT from $ZERO_SHOT_AUDIO_PROMPT_URL"
+        if ! curl -fsSL "$ZERO_SHOT_AUDIO_PROMPT_URL" -o "$PROMPT_TARGET"; then
+            echo "Failed to download audio prompt from URL: $ZERO_SHOT_AUDIO_PROMPT_URL" >&2
+        fi
+    fi
+    export ZERO_SHOT_AUDIO_PROMPT="$PROMPT_TARGET"
+fi
+
 # All dependencies and langgraph CLI are installed at build time
 
 # Start langgraph dev from within the internal agents directory (background)
