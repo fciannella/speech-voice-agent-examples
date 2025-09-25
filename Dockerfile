@@ -14,6 +14,7 @@ FROM python:3.12-slim
 
 # Environment setup
 ENV PYTHONUNBUFFERED=1
+ENV UV_NO_TRACKED_CACHE=1
 
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -59,6 +60,11 @@ RUN uv pip install -r agents/requirements.txt
 # Ensure langgraph CLI is available at build time
 RUN uv pip install -U langgraph
 RUN chmod +x start.sh
+
+# Fix ownership so runtime user can read caches and virtualenv
+RUN mkdir -p /home/user/.cache/uv \
+    && chown -R 1000:1000 /home/user/.cache \
+    && if [ -d /app/examples/voice_agent_webrtc_langgraph/.venv ]; then chown -R 1000:1000 /app/examples/voice_agent_webrtc_langgraph/.venv; fi
 
 # Port configuration (single external port for app)
 EXPOSE 7860
