@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: BSD 2-Clause License
 
 export const RTC_CONFIG = {};
+const { protocol, host } = window.location;
+const wsProto = protocol === "https:" ? "wss" : "ws";
 
-const host = window.location.hostname;
-
-export const RTC_OFFER_URL = `ws://${host}:7860/ws`;
-export const POLL_PROMPT_URL = `http://${host}:7860/get_prompt`;
-export const ASSISTANTS_URL = `http://${host}:7860/assistants`;
+export const RTC_OFFER_URL = `${wsProto}://${host}/ws`;
+export const POLL_PROMPT_URL = `/get_prompt`;
+export const ASSISTANTS_URL = `/assistants`;
 
 // Set to true to use dynamic prompt mode, false for default mode
 export const DYNAMIC_PROMPT = false;
