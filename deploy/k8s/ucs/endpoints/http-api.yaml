@@ -1,0 +1,179 @@
+# Copyright (c) 2025, NVIDIA CORPORATION.  All rights reserved.
+#
+# NVIDIA CORPORATION and its licensors retain all intellectual property
+# and proprietary rights in and to this software, related documentation
+# and any modifications thereto.  Any use, reproduction, disclosure or
+# distribution of this software and related documentation without an express
+# license agreement from NVIDIA CORPORATION is strictly prohibited.
+
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "FastAPI",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/stream/add": {
+      "post": {
+        "summary": "Add Stream",
+        "description": "Register a new pipeline / stream ID.\n\nArgs:\n    request: StreamRequest object containing stream registration details.\n\nReturns:\n    dict: A dictionary with a message indicating the successful addition of the stream ID.",
+        "operationId": "add_stream_stream_add_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StreamRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stream/remove": {
+      "post": {
+        "summary": "Remove Stream",
+        "description": "Remove a pipeline / stream ID.\n\nArgs:\n    request: StreamRequest object containing stream removal details.\n\nReturns:\n    dict: A dictionary with a message indicating the successful removal of the stream ID.",
+        "operationId": "remove_stream_stream_remove_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StreamRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "StreamEvent": {
+        "properties": {
+          "camera_url": {
+            "type": "string",
+            "title": "Camera Url",
+            "description": "RTSP URL of the stream",
+            "default": ""
+          },
+          "camera_id": {
+            "type": "string",
+            "title": "Camera Id",
+            "description": "Unique identifier for the stream"
+          }
+        },
+        "type": "object",
+        "required": [
+          "camera_id"
+        ],
+        "title": "StreamEvent",
+        "description": "Schema for event for stream registration."
+      },
+      "StreamRequest": {
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/StreamEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event"
+        ],
+        "title": "StreamRequest",
+        "description": "Schema for request for stream registration."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

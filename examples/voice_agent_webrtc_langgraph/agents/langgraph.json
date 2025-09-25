@@ -1,0 +1,16 @@
+{
+    "dependencies": ["."],
+    "graphs": {
+      "rbc-fees-agent": "./rbc-fees-agent/react_agent.py:agent",
+      "wire-transfer-agent": "./wire-transfer-agent/react_agent.py:agent",
+      "telco-agent": "./telco-agent/react_agent.py:agent"
+    },
+    "dockerfile_lines": [
+            "RUN pip install --upgrade pip",
+            "COPY ace_base_agent/requirements.txt /tmp/requirements.txt",
+            "RUN pip install -r /tmp/requirements.txt",
+            "COPY ../requirements.txt /tmp/root_requirements.txt",
+            "RUN pip install -r /tmp/root_requirements.txt"
+        ],
+    "env": ".env"
+}

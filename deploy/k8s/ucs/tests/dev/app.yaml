@@ -1,0 +1,39 @@
+# Copyright (c) 2025, NVIDIA CORPORATION.  All rights reserved.
+#
+# NVIDIA CORPORATION and its licensors retain all intellectual property
+# and proprietary rights in and to this software, related documentation
+# and any modifications thereto.  Any use, reproduction, disclosure or
+# distribution of this software and related documentation without an express
+# license agreement from NVIDIA CORPORATION is strictly prohibited.
+
+specVersion: 2.0.0
+
+version: 1.0.1
+
+name: ace-controller-test
+
+description: Developer tests for ace-controller service
+
+dependencies:
+- ucf.svc.ace-controller:1.0.1
+- ucf.svc.core.redis-timeseries:0.0.22
+
+components:
+- name: ace-controller
+  type: ucf.svc.ace-controller
+  parameters:
+    imagePullSecrets:
+    - name: ngc-docker-reg-secret
+  files:
+    config.yaml: ./config.yaml
+
+
+- name: redis-timeseries
+  type: ucf.svc.core.redis-timeseries
+  parameters:
+    imagePullSecrets:
+    - name: ngc-docker-reg-secret
+
+connections:
+  ace-controller/redis: redis-timeseries/redis
+

@@ -1,0 +1,49 @@
+name: voice-agents-webrtc-langgraph
+
+services:
+  python-app:
+    build:
+      context: ../../
+      dockerfile: examples/voice_agent_webrtc_langgraph/Dockerfile
+    ports:
+      - "9000:9000"   # UI static server
+      - "7860:7860"   # Pipeline API/WebSocket
+      - "2024:2024"   # LangGraph dev (optional external access)
+    volumes:
+      - ./audio_dumps:/app/examples/voice_agent_webrtc_langgraph/audio_dumps
+      # - /home/fciannella/src/ace-controller/examples/voice_agent_webrtc_langgraph:/app/examples/voice_agent_webrtc_langgraph/audio_prompt.wav
+      # - /home/fciannella/src/ace-controller-langgraph-agents:/langgraph-agents
+    env_file:
+      - .env
+    environment:
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - USE_LANGGRAPH=${USE_LANGGRAPH}
+      - LANGGRAPH_BASE_URL=${LANGGRAPH_BASE_URL}
+      - LANGGRAPH_ASSISTANT=${LANGGRAPH_ASSISTANT}
+      - USER_EMAIL=${USER_EMAIL}
+      - LANGGRAPH_STREAM_MODE=${LANGGRAPH_STREAM_MODE}
+      - LANGGRAPH_DEBUG_STREAM=${LANGGRAPH_DEBUG_STREAM}
+      - LANGGRAPH_PORT=${LANGGRAPH_PORT}
+
+      - RIVA_ASR_LANGUAGE=en-US
+      - RIVA_TTS_LANGUAGE=en-US
+      - RIVA_TTS_VOICE_ID=Magpie-ZeroShot.Female-1
+      - ZERO_SHOT_AUDIO_PROMPT=/app/examples/voice_agent_webrtc_langgraph/audio_prompt.wav # set this only if using a zero-shot TTS model with a custom audio prompt
+      - ENABLE_SPECULATIVE_SPEECH=true # set to false to disable speculative speech processing
+
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7860/get_prompt || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+volumes:
+  nim_cache:
+  riva_data:

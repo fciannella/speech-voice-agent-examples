@@ -1,0 +1,189 @@
+// Copyright (c) 2025, NVIDIA CORPORATION.  All rights reserved.
+//
+// NVIDIA CORPORATION and its licensors retain all intellectual property
+// and proprietary rights in and to this software, related documentation
+// and any modifications thereto.  Any use, reproduction, disclosure or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA CORPORATION is strictly prohibited.
+
+
+syntax = "proto3";
+
+package nvidia_ace.services.animation_data.v1;
+
+service AnimationDataService {
+  rpc PushAnimationDataStream(stream AnimationDataStream)
+      returns (Status) {}
+  rpc PullAnimationDataStream(AnimationIds)
+      returns (stream AnimationDataStream) {}
+}
+
+message AnimationDataStreamHeader {
+  AnimationIds animation_ids = 1;
+
+  // This is required to identify from which animation source (e.g. A2X) the
+  // request originates. This allows us to map the incoming animation data
+  // stream to the correct pose provider animation graph node. The animation
+  // source MSs (e.g. A2X MS) should populate this with their name. (e.g. A2X).
+  string source_service_id = 2;
+
+  AudioHeader audio_header = 3;
+  SkelAnimationHeader skel_animation_header = 4;
+
+  // Time codes indicate the relative progression of an animation data, audio
+  // clip, etc. The unit is seconds. In addition, we also need an absolute time
+  // reference shared across services. The start time is stored in time codes
+  // elapsed since the Unix time epoch. start_time_code_since_epoch = `Unix
+  // timestamp in seconds`. NTP should be good enough to synchronize clocks
+  // across nodes. From Wikipedia: NTP can usually maintain time to within tens
+  // of milliseconds over the public Internet, and can achieve better than one
+  // millisecond accuracy in local area networks under ideal conditions.
+  // Alternatively, there is PTP.
+  double start_time_code_since_epoch = 5;
+
+  // A generic metadata field to attach use case specific data (e.g. session id,
+  // or user id?) map<string, string> metadata = 6; map<string,
+  // google.protobuf.Any> metadata = 6;
+}
+
+message AnimationDataStream {
+  // The header must be sent as the first message.
+  // One or more animation data message must be sent.
+  // The status must be sent last and may be sent in between.
+  oneof stream_part {
+    AnimationDataStreamHeader animation_data_stream_header = 1;
+    AnimationData animation_data = 2;
+    Status status = 3;
+  }
+}
+
+message AnimationData {
+  SkelAnimation skel_animation = 1;
+  AudioWithTimeCode audio = 2;
+  Camera camera = 3;
+
+  // map<string, google.protobuf.Any> metadata = 4;
+}
+
+message AudioWithTimeCode {
+  // The time code is relative to the `start_time_code_since_epoch`.
+  double time_code = 1;
+  bytes audio_buffer = 2;
+}
+
+message SkelAnimationHeader {
+  repeated string blend_shapes = 1;
+  repeated string joints = 2;
+}
+
+message SkelAnimation {
+  // Time codes must be strictly monotonically increasing.
+  // Two successive SkelAnimation messages must not have overlapping time code
+  // ranges.
+  repeated FloatArrayWithTimeCode blend_shape_weights = 1;
+  repeated Float3ArrayWithTimeCode translations = 2;
+  repeated QuatFArrayWithTimeCode rotations = 3;
+  repeated Float3ArrayWithTimeCode scales = 4;
+}
+
+message Camera {
+  repeated Float3WithTimeCode position = 1;
+  repeated QuatFWithTimeCode rotation = 2;
+
+  repeated FloatWithTimeCode focal_length = 3;
+  repeated FloatWithTimeCode focus_distance = 4;
+}
+
+message FloatArrayWithTimeCode {
+  double time_code = 1;
+  repeated float values = 2;
+}
+
+message Float3ArrayWithTimeCode {
+  double time_code = 1;
+  repeated Float3 values = 2;
+}
+
+message QuatFArrayWithTimeCode {
+  double time_code = 1;
+  repeated QuatF values = 2;
+}
+
+message Float3WithTimeCode {
+  double time_code = 1;
+  Float3 value = 2;
+}
+
+message QuatFWithTimeCode {
+  double time_code = 1;
+  QuatF value = 2;
+}
+
+message FloatWithTimeCode {
+  double time_code = 1;
+  float value = 2;
+}
+
+message QuatF {
+  float real = 1;
+  float i = 2;
+  float j = 3;
+  float k = 4;
+}
+
+message Float3 {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+}
+
+message AnimationIds {
+
+  // This is required to track a single animation source (e.g. A2X) request
+  // through the animation pipeline. This is going to allow e.g. the controller
+  // to stop a request after it has been sent to the animation compositor (e.g.
+  // animation graph).
+  string request_id = 1;
+
+  // The stream id is shared across the animation pipeline and identifies all
+  // animation data streams that belong to the same stream. Thus, there will be
+  // multiple request all belonging to the same stream. Different user sessions,
+  // will usually result in a new stream id. This is required for stateful MSs
+  // (e.g. anim graph) to map different requests to the same stream.
+  string stream_id = 2;
+
+  // This identifies the target avatar or object the animation data applies to.
+  // This is required when there are multiple avatars or objects in the scene.
+  // A default name could be AceModel
+  string target_object_id = 3;
+}
+
+message AudioHeader {
+  enum AudioFormat { AUDIO_FORMAT_PCM = 0; }
+
+  AudioFormat audio_format = 1;
+
+  // Note: Currently only mono sound must be supported. Multi-channel audio
+  // support is optional.
+  uint32 channel_count = 2;
+
+  // Note: Currently only 16kHz, 44.1kHz, and 48kHz must be supported. Support
+  // for other sample rates is optional.
+  uint32 samples_per_second = 3;
+
+  // Note: Currently only 16 bits per sample must be supported. Support for
+  // other values is optional.
+  uint32 bits_per_sample = 4;
+}
+
+message Status {
+  enum Code {
+    SUCCESS = 0;
+    INFO = 1;
+    WARNING = 2;
+    ERROR = 3;
+  }
+
+  Code code = 1;
+  string message = 2;
+}

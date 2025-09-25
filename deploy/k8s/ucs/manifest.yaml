@@ -1,0 +1,258 @@
+# Copyright (c) 2025, NVIDIA CORPORATION.  All rights reserved.
+#
+# NVIDIA CORPORATION and its licensors retain all intellectual property
+# and proprietary rights in and to this software, related documentation
+# and any modifications thereto.  Any use, reproduction, disclosure or
+# distribution of this software and related documentation without an express
+# license agreement from NVIDIA CORPORATION is strictly prohibited.
+
+type: msapplication
+specVersion: 2.5.0
+name: ucf.svc.ace-controller
+chartName: ace-controller
+description: ACE Controller
+version: 1.0.2
+displayName: "ACE Controller Microservice"
+category:
+  functional: "Conversational AI"
+  industry: "General"
+tags: []
+keywords: []
+nSpectId: NSPECT-XGIZ-EB0C
+
+publish: false
+
+egress-endpoints:
+  - name: "redis"
+    description: Redis message broker
+    protocol: TCP
+    scheme: asyncio
+    mandatory: False
+    data-flow: in-out
+  - name: "riva-speech"
+    description: Riva Speech Skills API
+    scheme: grpc
+    protocol: TCP
+    mandatory: False
+    data-flow: in-out
+  - name: "animgraph-http"
+    description: Animation Graph HTTP API
+    scheme: http
+    protocol: TCP
+    mandatory: False
+    data-flow: out
+  - name: "animgraph-grpc"
+    description: Animation Graph GRPC API
+    scheme: grpc
+    protocol: TCP
+    mandatory: False
+    data-flow: out
+  - name: "a2f-grpc"
+    description: Audio2Face service GRPC API
+    scheme: grpc
+    protocol: TCP
+    mandatory: False
+    data-flow: out
+
+ingress-endpoints:
+  - name: http-api
+    description: ACE Controller REST API
+    scheme: http
+    data-flow: in-out
+
+secrets:
+  - name: nvidia-api-key-secret
+    description: Secret for NVIDIA API key
+    mandatory: False
+    mountPath: /secrets
+    fileName: nvidia_api_key.txt
+  - name: openai-key-secret
+    description: Secret for passing OpenAI key
+    mandatory: False
+    mountPath: /secrets
+    fileName: openai_api_key.txt
+  - name: elevenlabs-api-key-secret
+    description: Secret for ElevenLabs API key
+    mandatory: False
+    mountPath: /secrets
+    fileName: elevenlabs_api_key.txt
+  - name: custom-env-secrets
+    description: Secret for passing custom env variables and API keys
+    mandatory: False
+    mountPath: /secrets
+    fileName: custom.env
+
+
+externalFiles:
+  - name: config.yaml
+    description: config
+    mandatory: true
+    isDirectory: false
+
+params:
+  OTEL_SDK_DISABLED: 'false'
+  #> description: when enabled, tracing data will be exported
+  #> type: string
+  OTEL_SERVICE_NAME: ace-controller
+  #> description: protocol for exporting OTel data
+  #> type: string
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+  #> description: endpoint for Otel collector
+  #> type: string
+  OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+  #> description: protocol for exporting OTel data
+  #> type: string
+  DEV: "0"
+  #> description: wether to activate dependencies hot reloading or not
+  #> type: string
+  image: "nvcr.io/nvidia/ace/tokkio-reference-ace-controller"
+  #> description: pipeline image repo
+  #> type: string
+  tag: "5.0.0"
+  #> description: pipeline image tag
+  #> type: string
+
+tests:
+  - name: dev-params1
+    app: tests/dev/app.yaml
+    params: tests/dev/params1.yaml
+    ciTrigger: false
+    timeout: 10
+    duration: 10
+    installPreReqs: true  # Wether to install foundational services
+    namespace: default  # Kubernetes namespace
+    gpuNodeLabels: ""
+    watchAllPods: true # OR set to false and set list of pods to watch below
+    watchPods:
+    - <pod-name-regex>
+    testerPods:  # At least one tester pod is required
+    - name: testpod1  # Name of the test pod
+      startSignature: <START>  # Signature to look for in the logs indicating start of tests. Regex is accepted
+      endSignature: <END>  # Signature to look for in the logs indicating end of tests. Regex is accepted
+      errorSignatures:  # Signatures that indicate test failures.  Regex is accepted
+      - <REGEX1>
+      - <REGEX2>
+
+---
+spec:
+  - name: ace-controller-deployment
+    type: ucf.k8s.app.deployment
+    parameters:
+      apptype: statefull
+      statefulSetServiceName: ace-controller-service
+      extraSpecs:
+        podManagementPolicy: Parallel
+
+
+  - name: "ace-controller-container"
+    type: ucf.k8s.container
+    parameters:
+      image:
+        repository: $params.image
+        tag: $params.tag
+        pullPolicy: Always
+      command: ["/bin/bash", "-c"]
+      args: ["source /opt/scripts/env.sh && /code/entrypoint.sh"]
+      env:
+        - name: ANIMGRAPH_URL
+          value: "http://$egress.animgraph-http.address:$egress.animgraph-http.port"
+        - name: ANIMGRAPH_GRPC_URL
+          value: "$egress.animgraph-grpc.address:$egress.animgraph-grpc.port"
+        - name: REDIS_URL
+          value: "redis://$egress.redis.address:$egress.redis.port"
+        - name: A2F_GRPC_URL
+          value: "$egress.a2f-grpc.address:$egress.a2f-grpc.port"
+        - name: RIVA_SERVER_URL
+          value: "$egress.riva-speech.address:$egress.riva-speech.port"
+        - name: DEV
+          value: $params.DEV
+        - name: OTEL_SDK_DISABLED
+          value: $params.OTEL_SDK_DISABLED
+        - name: OTEL_SERVICE_NAME
+          value: $params.OTEL_SERVICE_NAME
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: $params.OTEL_EXPORTER_OTLP_ENDPOINT
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: $params.OTEL_EXPORTER_OTLP_PROTOCOL
+        - name: OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED
+          value: 'true'
+        - name: IMAGE_NAME
+          value: $params.image
+        - name: IMAGE_TAG
+          value: $params.tag
+      ports:
+      - containerPort: 8000
+        name: http
+      startupProbe:
+        tcpSocket:
+          port: http
+        initialDelaySeconds: 20
+        failureThreshold: 30
+        periodSeconds: 10
+      livenessProbe:
+        tcpSocket:
+          port: http
+        initialDelaySeconds: 20
+        periodSeconds: 20
+        timeoutSeconds: 5
+      readinessProbe:
+        tcpSocket:
+          port: http
+        initialDelaySeconds: 20
+        periodSeconds: 20
+        timeoutSeconds: 5
+
+  - name: app-storage
+    type: ucf.k8s.pvc
+    parameters:
+      spec:
+        storageClassName: mdx-local-path
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Gi
+
+  - name: app-storage-volume
+    type: ucf.k8s.volume
+    parameters:
+      persistentVolumeClaim:
+        claimName: ace-controller-app-storage
+
+  - name: app-storage-mount
+    type: ucf.appspec.defaultVolumeMount
+    parameters:
+      name: app-storage-volume
+      mountPath: /code
+
+  - name: restartPolicy
+    type: ucf.k8s.restartPolicy
+    parameters:
+      policy: Always # Always / OnFailure / Never
+
+  - name: podSecurityContext
+    type: ucf.k8s.podSecurityContext
+    parameters:
+      runAsGroup: 1000
+      runAsUser: 1000
+
+  - name: ace-controller-service
+    type: ucf.k8s.service
+    parameters:
+      ports:
+      - port: 8000
+        protocol: TCP
+        name: http-api
+      type: ClusterIP
+
+  - name: ace-controller-metrics
+    type: ucf.crd.podMonitor
+    parameters:
+      portName: metrics
+      path: /metrics
+  
+  - name: cm-dependencies
+    type: ucf.appspec.restartPodOnConfigChanges
+    parameters:
+      # Add dependency on all configmaps detected in the microservice
+      addAll: true
+      
