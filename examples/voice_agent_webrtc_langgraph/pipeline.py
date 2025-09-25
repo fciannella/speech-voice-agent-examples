@@ -85,6 +85,12 @@ async def list_assistants(request: Request):
 
     Output: List of {assistant_id, graph_id?, name?, description?, display_name}.
     """
+    # Hard-coded assistants list
+    return [
+        {"assistant_id": "rbc-fees-agent", "graph_id": "rbc-fees-agent", "display_name": "RBC Fees Agent"},
+        {"assistant_id": "wire-transfer-agent", "graph_id": "wire-transfer-agent", "display_name": "Wire Transfer Agent"},
+        {"assistant_id": "telco-agent", "graph_id": "telco-agent", "display_name": "Telco Agent"},
+    ]
     import requests
 
     base_url = os.getenv("LANGGRAPH_BASE_URL", "http://127.0.0.1:2024").rstrip("/")
