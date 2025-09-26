@@ -3,7 +3,8 @@
     "graphs": {
       "rbc-fees-agent": "./rbc-fees-agent/react_agent.py:agent",
       "wire-transfer-agent": "./wire-transfer-agent/react_agent.py:agent",
-      "telco-agent": "./telco-agent/react_agent.py:agent"
+      "telco-agent": "./telco-agent/react_agent.py:agent",
+      "healthcare-agent": "./healthcare-agent/react_agent.py:agent"
     },
     "dockerfile_lines": [
             "RUN pip install --upgrade pip",

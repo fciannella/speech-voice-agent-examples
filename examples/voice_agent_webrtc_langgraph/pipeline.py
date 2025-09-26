@@ -90,6 +90,7 @@ async def list_assistants(request: Request):
         {"assistant_id": "rbc-fees-agent", "graph_id": "rbc-fees-agent", "display_name": "RBC Fees Agent"},
         {"assistant_id": "wire-transfer-agent", "graph_id": "wire-transfer-agent", "display_name": "Wire Transfer Agent"},
         {"assistant_id": "telco-agent", "graph_id": "telco-agent", "display_name": "Telco Agent"},
+        {"assistant_id": "healthcare-agent", "graph_id": "healthcare-agent", "display_name": "Healthcare Nurse Agent"},
     ]
     import requests
 
