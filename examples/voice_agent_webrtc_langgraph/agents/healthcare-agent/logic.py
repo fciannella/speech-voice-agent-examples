@@ -620,3 +620,244 @@ def authenticate_user(session_id: str, name: Optional[str], dob_yyyy_mm_dd: Opti
     return resp
 
 
+
+# --- Healthcare demo logic (patients, triage, providers, pharmacies) ---
+
+_HC_SESSIONS: Dict[str, Dict[str, Any]] = {}
+_HC_APPOINTMENTS: List[Dict[str, Any]] = []
+_HC_CALL_LOG: List[Dict[str, Any]] = []
+
+
+def _hc_fixtures_dir() -> Path:
+    return Path(__file__).parent / "mock_data"
+
+
+def _hc_load_fixture(name: str) -> Any:
+    # Use a separate cache key namespace to avoid collisions
+    key = f"hc::{name}"
+    if key in _FIXTURE_CACHE:
+        return _FIXTURE_CACHE[key]
+    p = _hc_fixtures_dir() / name
+    with p.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    _FIXTURE_CACHE[key] = data
+    return data
+
+
+def _hc_get_patient_blob(patient_id: str) -> Dict[str, Any]:
+    data = _hc_load_fixture("patients.json")
+    return dict((data.get("patients") or {}).get(patient_id, {}))
+
+
+def find_patient_by_name(first_name: str, last_name: str) -> Dict[str, Any]:
+    data = _hc_load_fixture("patients.json")
+    patients = data.get("patients", {})
+    fn = (first_name or "").strip().lower()
+    ln = (last_name or "").strip().lower()
+    for pid, blob in patients.items():
+        prof = blob.get("profile") if isinstance(blob, dict) else None
+        if isinstance(prof, dict):
+            pfn = str(prof.get("first_name") or "").strip().lower()
+            pln = str(prof.get("last_name") or "").strip().lower()
+            if fn == pfn and ln == pln:
+                return {"patient_id": pid, "profile": prof}
+    return {}
+
+
+def find_patient_by_full_name(full_name: str) -> Dict[str, Any]:
+    data = _hc_load_fixture("patients.json")
+    patients = data.get("patients", {})
+    target = (full_name or "").strip().lower()
+    for pid, blob in patients.items():
+        prof = blob.get("profile") if isinstance(blob, dict) else None
+        if isinstance(prof, dict):
+            fn = f"{str(prof.get('first_name') or '').strip()} {str(prof.get('last_name') or '').strip()}".strip().lower()
+            ff = str(prof.get("full_name") or "").strip().lower()
+            if target and (target == fn or target == ff):
+                return {"patient_id": pid, "profile": prof}
+    return {}
+
+
+def get_patient_profile(patient_id: str) -> Dict[str, Any]:
+    blob = _hc_get_patient_blob(patient_id)
+    if not blob:
+        return {}
+    prof = dict(blob.get("profile", {}))
+    return {
+        "profile": prof,
+        "allergies": list(blob.get("allergies", [])),
+        "medications": list(blob.get("medications", [])),
+        "conditions": list(blob.get("conditions", [])),
+        "recent_visits": list(blob.get("recent_visits", [])),
+        "vitals": dict(blob.get("vitals", {})),
+    }
+
+
+def authenticate_patient(session_id: str, patient_id: Optional[str], full_name: Optional[str], dob_yyyy_mm_dd: Optional[str], mrn_last4: Optional[str], secret_answer: Optional[str]) -> Dict[str, Any]:
+    session = _HC_SESSIONS.get(session_id) or {"verified": False, "patient_id": patient_id, "name": full_name}
+    if isinstance(patient_id, str) and patient_id:
+        session["patient_id"] = patient_id
+    if isinstance(full_name, str) and full_name:
+        session["name"] = full_name
+    if isinstance(dob_yyyy_mm_dd, str) and dob_yyyy_mm_dd:
+        session["dob"] = _normalize_dob(dob_yyyy_mm_dd) or dob_yyyy_mm_dd
+    if isinstance(mrn_last4, str) and mrn_last4:
+        session["mrn_last4"] = mrn_last4
+    if isinstance(secret_answer, str) and secret_answer:
+        session["secret"] = secret_answer
+
+    ok = False
+    pid = session.get("patient_id")
+    if isinstance(pid, str):
+        prof = get_patient_profile(pid).get("profile", {})
+        user_dob_norm = _normalize_dob(session.get("dob"))
+        prof_dob_norm = _normalize_dob(prof.get("dob"))
+        dob_ok = (user_dob_norm is not None) and (user_dob_norm == prof_dob_norm)
+        mrn_ok = str(session.get("mrn_last4") or "") == str(prof.get("mrn_last4") or "")
+        def _norm(x: Optional[str]) -> str:
+            return (x or "").strip().lower()
+        secret_ok = _norm(session.get("secret")) == _norm(prof.get("secret_answer"))
+        if dob_ok and (mrn_ok or secret_ok):
+            ok = True
+    session["verified"] = ok
+    _HC_SESSIONS[session_id] = session
+    need: List[str] = []
+    if _normalize_dob(session.get("dob")) is None:
+        need.append("dob")
+    if not session.get("mrn_last4") and not session.get("secret"):
+        need.append("mrn_last4_or_secret")
+    if not session.get("patient_id"):
+        need.append("patient")
+    resp: Dict[str, Any] = {"session_id": session_id, "verified": ok, "needs": need, "profile": {"name": session.get("name")}}
+    try:
+        if isinstance(session.get("patient_id"), str):
+            prof = get_patient_profile(session.get("patient_id")).get("profile", {})
+            if isinstance(prof, dict) and prof.get("secret_question"):
+                resp["question"] = prof.get("secret_question")
+    except Exception:
+        pass
+    return resp
+
+
+def get_preferred_pharmacy(patient_id: str) -> Dict[str, Any]:
+    prof = get_patient_profile(patient_id).get("profile", {})
+    ph_id = prof.get("preferred_pharmacy_id")
+    if not ph_id:
+        return {}
+    data = _hc_load_fixture("pharmacies.json")
+    ph = (data.get("pharmacies") or {}).get(ph_id) or {}
+    return {"pharmacy_id": ph_id, **ph}
+
+
+def list_providers(specialty: Optional[str] = None) -> List[Dict[str, Any]]:
+    data = _hc_load_fixture("providers.json")
+    providers = data.get("providers", {})
+    out: List[Dict[str, Any]] = []
+    for pid, p in providers.items():
+        if specialty and str(p.get("specialty", "")).lower() != specialty.strip().lower():
+            continue
+        out.append({"provider_id": pid, **p})
+    return out
+
+
+def get_provider_slots(provider_id: str, count: int = 3) -> List[str]:
+    data = _hc_load_fixture("providers.json")
+    providers = data.get("providers", {})
+    p = providers.get(provider_id) or {}
+    return list((p.get("next_available") or [])[:count])
+
+
+def schedule_appointment(provider_id: str, slot_iso: str, patient_id: Optional[str]) -> Dict[str, Any]:
+    appt = {
+        "appointment_id": f"A-{uuid.uuid4().hex[:8]}",
+        "provider_id": provider_id,
+        "slot": slot_iso,
+        "patient_id": patient_id,
+        "created_at": datetime.utcnow().isoformat() + "Z",
+        "status": "booked",
+    }
+    _HC_APPOINTMENTS.append(appt)
+    return appt
+
+
+def _patient_age_years(patient_id: Optional[str]) -> Optional[int]:
+    try:
+        if not patient_id:
+            return None
+        prof = get_patient_profile(patient_id).get("profile", {})
+        dob = _normalize_dob(prof.get("dob"))
+        if not dob:
+            return None
+        y, m, d = [int(x) for x in dob.split("-")]
+        today = datetime.utcnow().date()
+        age = today.year - y - ((today.month, today.day) < (m, d))
+        return age
+    except Exception:
+        return None
+
+
+def triage_symptoms(patient_id: Optional[str], symptoms_text: str) -> Dict[str, Any]:
+    txt = (symptoms_text or "").lower()
+    rules = _hc_load_fixture("triage_rules.json").get("rules", [])
+    age = _patient_age_years(patient_id) or 0
+
+    def contains_any(needles: List[str]) -> bool:
+        for n in needles:
+            if n.lower() in txt:
+                return True
+        return False
+
+    chosen: Dict[str, Any] | None = None
+    red_flags_hit: List[str] = []
+
+    for r in rules:
+        matches = r.get("match", [])
+        if matches and not contains_any(matches):
+            continue
+        rflags = r.get("red_flags", [])
+        if rflags:
+            red_flags_hit = [rf for rf in rflags if rf.lower() in txt]
+            if red_flags_hit:
+                chosen = r
+                break
+        crit = r.get("criteria", [])
+        if crit:
+            if "age_over_50" in crit and age > 50:
+                chosen = r
+                break
+        if not r.get("red_flags") and not r.get("criteria"):
+            chosen = r
+            # do not break; prefer a more specific rule if later
+
+    if not chosen and rules:
+        chosen = rules[-1]
+
+    if not chosen:
+        return {"risk": "self_care", "advice": "If symptoms persist or worsen, contact us or seek care.", "red_flags": []}
+
+    return {
+        "risk": chosen.get("escalate", "self_care"),
+        "advice": chosen.get("advice", ""),
+        "red_flags": red_flags_hit,
+        "rule": chosen.get("name", "")
+    }
+
+
+def log_call(session_id: str, patient_id: Optional[str], notes: Optional[str], triage: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    entry = {
+        "log_id": f"L-{uuid.uuid4().hex[:8]}",
+        "session_id": session_id,
+        "patient_id": patient_id,
+        "notes": notes or "",
+        "triage": triage or {},
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+    _HC_CALL_LOG.append(entry)
+    try:
+        # Also mirror to app.log for visibility
+        logging.getLogger("HealthcareAgent").info("call_log: %s", json.dumps(entry)[:500])
+    except Exception:
+        pass
+    return {"logged": True, "log_id": entry["log_id"]}
+
+

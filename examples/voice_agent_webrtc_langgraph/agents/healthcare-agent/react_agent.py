@@ -18,90 +18,73 @@ from langchain_core.messages import (
 )
 
 
-# ---- Tools (wire-transfer) ----
+# ---- Tools (healthcare) ----
 
 try:
-    from . import tools as wire_tools  # type: ignore
+    from . import tools as hc_tools  # type: ignore
 except Exception:
     import importlib.util as _ilu
     _dir = os.path.dirname(__file__)
     _tools_path = os.path.join(_dir, "tools.py")
-    _spec = _ilu.spec_from_file_location("wire_transfer_agent_tools", _tools_path)
-    wire_tools = _ilu.module_from_spec(_spec)  # type: ignore
+    _spec = _ilu.spec_from_file_location("healthcare_agent_tools", _tools_path)
+    hc_tools = _ilu.module_from_spec(_spec)  # type: ignore
     assert _spec and _spec.loader
-    _spec.loader.exec_module(wire_tools)  # type: ignore
+    _spec.loader.exec_module(hc_tools)  # type: ignore
 
 # Aliases for tool functions
-list_accounts = wire_tools.list_accounts
-get_customer_profile = wire_tools.get_customer_profile
-find_customer = wire_tools.find_customer
-find_account_by_last4 = wire_tools.find_account_by_last4
-verify_identity = wire_tools.verify_identity
-get_account_balance_tool = wire_tools.get_account_balance_tool
-get_exchange_rate_tool = wire_tools.get_exchange_rate_tool
-calculate_wire_fee_tool = wire_tools.calculate_wire_fee_tool
-check_wire_limits_tool = wire_tools.check_wire_limits_tool
-get_cutoff_and_eta_tool = wire_tools.get_cutoff_and_eta_tool
-get_country_requirements_tool = wire_tools.get_country_requirements_tool
-validate_beneficiary_tool = wire_tools.validate_beneficiary_tool
-save_beneficiary_tool = wire_tools.save_beneficiary_tool
-quote_wire_tool = wire_tools.quote_wire_tool
-generate_otp_tool = wire_tools.generate_otp_tool
-verify_otp_tool = wire_tools.verify_otp_tool
-wire_transfer_domestic = wire_tools.wire_transfer_domestic
-wire_transfer_international = wire_tools.wire_transfer_international
+find_patient = hc_tools.find_patient
+get_patient_profile_tool = hc_tools.get_patient_profile_tool
+verify_identity = hc_tools.verify_identity
+get_preferred_pharmacy_tool = hc_tools.get_preferred_pharmacy_tool
+list_providers_tool = hc_tools.list_providers_tool
+get_provider_slots_tool = hc_tools.get_provider_slots_tool
+schedule_appointment_tool = hc_tools.schedule_appointment_tool
+triage_symptoms_tool = hc_tools.triage_symptoms_tool
+log_call_tool = hc_tools.log_call_tool
 
-find_customer_by_name = None  # not used for wire agent; tools expose find_customer
+find_customer_by_name = None  # not used
 
 
 """ReAct agent entrypoint and system prompt."""
 
 
 SYSTEM_PROMPT = (
-    "You are a warm, cheerful banking assistant helping a customer send a wire transfer (domestic or international). "
-    "Start with a brief greeting and very short small talk. Then ask for the caller's full name. "
-    "IDENTITY IS MANDATORY: Before ANY account lookups or wire questions, you MUST call verify_identity. Ask for date of birth (customer can use any format; you normalize) and EITHER SSN last-4 OR the secret answer. If verify_identity returns a secret question, read it verbatim and collect the answer. "
-    "NEVER claim the customer is verified unless the verify_identity tool returned verified=true. If not verified, ask ONLY for the next missing field and call verify_identity again. Do NOT proceed to wire details until verified=true. "
-    "AFTER VERIFIED: Ask ONE question at a time, in this order, waiting for the user's answer each time: (1) wire type (DOMESTIC or INTERNATIONAL); (2) source account (last-4 or picker); (3) amount (with source currency); (4) destination country/state; (5) destination currency preference; (6) who pays fees (OUR/SHA/BEN). Keep each turn to a single, concise prompt. Do NOT re-ask for fields already provided; instead, briefly summarize known details and ask only for the next missing field. "
-    "If destination currency differs from source, call get_exchange_rate_tool and state the applied rate and converted amount. "
-    "Collect beneficiary details next. Use get_country_requirements_tool and validate_beneficiary_tool; if fields are missing, ask for ONLY the next missing field (one per turn). "
-    "Then check balance/limits via get_account_balance_tool and check_wire_limits_tool. Provide a pre-transfer quote using quote_wire_tool showing: FX rate, total fees, who pays what, net sent, net received, and ETA from get_cutoff_and_eta_tool. "
-    "Before executing, generate an OTP (generate_otp_tool), collect it, verify via verify_otp_tool, then execute the appropriate transfer: wire_transfer_domestic or wire_transfer_international. Offer to save the beneficiary afterward. "
-    "STYLE: Keep messages short (1–2 sentences), empathetic, and strictly ask one question per turn."
+    "You are a compassionate 24/7 telehealth nurse for existing patients. "
+    "Begin with a warm, concise greeting and ask for the caller's full name. "
+    "IDENTITY IS MANDATORY: Before accessing any records, verify identity using date of birth (any format; you normalize) and EITHER MRN last-4 OR the secret answer. If a secret question is available, read it verbatim and collect the answer. "
+    "NEVER claim the caller is verified unless verification returns verified=true. If not verified, ask ONLY for the next missing field and verify again. "
+    "AFTER VERIFIED: Ask ONE question at a time. Gather chief complaint and symptoms in plain language. Screen for common red flags (severe/worst-ever, head injury, weakness/numbness, vision changes, seizure, stiff neck, high fever). If any red flag is present, clearly advise urgent evaluation. "
+    "Use a calm, empathetic tone and keep responses short (1–2 sentences). "
+    "If no red flags, provide brief self-care guidance (hydration, rest, acetaminophen dose guidance when appropriate) and offer to book a telehealth appointment with available providers. "
+    "Confirm preferred pharmacy for prescriptions if needed. "
+    "Always speak clearly and avoid medical jargon."
 )
 
 
 _MODEL_NAME = os.getenv("REACT_MODEL", os.getenv("CLARIFY_MODEL", "gpt-4o"))
-_LLM = ChatOpenAI(model=_MODEL_NAME, temperature=0.3)
+_OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
+_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+_LLM = ChatOpenAI(model=_MODEL_NAME, temperature=0.3, base_url=_OPENAI_BASE_URL, api_key=_OPENAI_API_KEY)
 _TOOLS = [
-    list_accounts,
-    get_customer_profile,
-    find_customer,
-    find_account_by_last4,
+    find_patient,
+    get_patient_profile_tool,
     verify_identity,
-    get_account_balance_tool,
-    get_exchange_rate_tool,
-    calculate_wire_fee_tool,
-    check_wire_limits_tool,
-    get_cutoff_and_eta_tool,
-    get_country_requirements_tool,
-    validate_beneficiary_tool,
-    save_beneficiary_tool,
-    quote_wire_tool,
-    generate_otp_tool,
-    verify_otp_tool,
-    wire_transfer_domestic,
-    wire_transfer_international,
+    triage_symptoms_tool,
+    list_providers_tool,
+    get_provider_slots_tool,
+    schedule_appointment_tool,
+    get_preferred_pharmacy_tool,
+    log_call_tool,
 ]
 _LLM_WITH_TOOLS = _LLM.bind_tools(_TOOLS)
 _TOOLS_BY_NAME = {t.name: t for t in _TOOLS}
 
 # Simple per-run context storage (thread-safe enough for local dev worker)
 _CURRENT_THREAD_ID: str | None = None
-_CURRENT_CUSTOMER_ID: str | None = None
+_CURRENT_PATIENT_ID: str | None = None
 
 # ---- Logger ----
-logger = logging.getLogger("WireTransferAgent")
+logger = logging.getLogger("HealthcareAgent")
 if not logger.handlers:
     _stream = logging.StreamHandler()
     _stream.setLevel(logging.INFO)
@@ -116,7 +99,7 @@ if not logger.handlers:
     except Exception:
         pass
 logger.setLevel(logging.INFO)
-_DEBUG = os.getenv("RBC_FEES_DEBUG", "0") not in ("", "0", "false", "False")
+_DEBUG = os.getenv("HC_DEBUG", "0") not in ("", "0", "false", "False")
 
 def _get_thread_id(config: Dict[str, Any] | None, messages: List[BaseMessage]) -> str:
     cfg = config or {}
@@ -256,24 +239,18 @@ def call_tool(tool_call: ToolCall) -> ToolMessage:
     """Execute a tool call and wrap result in a ToolMessage."""
     tool = _TOOLS_BY_NAME[tool_call["name"]]
     args = tool_call.get("args") or {}
-    # Auto-inject session/customer context if missing for identity and other tools
+    # Auto-inject session/patient context for identity and profile tools
     if tool.name == "verify_identity":
         if "session_id" not in args and _CURRENT_THREAD_ID:
             args["session_id"] = _CURRENT_THREAD_ID
-        if "customer_id" not in args and _CURRENT_CUSTOMER_ID:
-            args["customer_id"] = _CURRENT_CUSTOMER_ID
-    if tool.name == "list_accounts":
-        if "customer_id" not in args and _CURRENT_CUSTOMER_ID:
-            args["customer_id"] = _CURRENT_CUSTOMER_ID
-    # Gate non-identity tools until verified=true
-    try:
-        if tool.name not in ("verify_identity", "find_customer"):
-            # Look back through recent messages for the last verify_identity result
-            # The runtime passes messages separately; we cannot access here, so rely on LLM prompt discipline.
-            # As an extra guard, if the tool is attempting a wire action before identity, return a friendly error.
-            pass
-    except Exception:
-        pass
+        if "patient_id" not in args and _CURRENT_PATIENT_ID:
+            args["patient_id"] = _CURRENT_PATIENT_ID
+    if tool.name in ("get_patient_profile_tool", "get_preferred_pharmacy_tool"):
+        if "patient_id" not in args and _CURRENT_PATIENT_ID:
+            args["patient_id"] = _CURRENT_PATIENT_ID
+    if tool.name == "triage_symptoms_tool":
+        if "patient_id" not in args:
+            args["patient_id"] = _CURRENT_PATIENT_ID
     if _DEBUG:
         try:
             logger.info("call_tool: name=%s args_keys=%s", tool.name, list(args.keys()))
@@ -328,12 +305,12 @@ def agent(messages: List[BaseMessage], previous: List[BaseMessage] | None, confi
     convo = _sanitize_conversation(convo)
     thread_id = _get_thread_id(config, new_list)
     logger.info("agent start: thread_id=%s total_in=%s (prev=%s, new=%s)", thread_id, len(convo), len(prev_list), len(new_list))
-    # Establish default customer from config (or fallback to cust_test)
+    # Establish default patient from config (or fallback to pt_jmarshall)
     conf = (config or {}).get("configurable", {}) if isinstance(config, dict) else {}
-    default_customer = conf.get("customer_id") or conf.get("user_email") or "cust_test"
+    default_patient = conf.get("patient_id") or conf.get("user_email") or "pt_jmarshall"
 
-    # Heuristic: infer customer_id from latest human name if provided (e.g., "I am Alice Stone")
-    inferred_customer: str | None = None
+    # Heuristic: infer patient_id from latest human name if provided (e.g., "I am John Marshall")
+    inferred_patient: str | None = None
     try:
         recent_humans = [m for m in reversed(new_list) if (getattr(m, "type", None) == "human" or getattr(m, "role", None) == "user" or (isinstance(m, dict) and m.get("type") == "human"))]
         text = None
@@ -343,22 +320,15 @@ def agent(messages: List[BaseMessage], previous: List[BaseMessage] | None, confi
                 break
         if isinstance(text, str):
             tokens = [t for t in text.replace(',', ' ').split() if t.isalpha()]
-            if len(tokens) >= 2 and find_customer_by_name is not None:
-                # Try adjacent pairs as first/last
-                for i in range(len(tokens) - 1):
-                    fn = tokens[i]
-                    ln = tokens[i + 1]
-                    found = find_customer_by_name(fn, ln)  # type: ignore
-                    if isinstance(found, dict) and found.get("customer_id"):
-                        inferred_customer = found.get("customer_id")
-                        break
+            if len(tokens) >= 2 and False:
+                pass
     except Exception:
         pass
 
     # Update module context
-    global _CURRENT_THREAD_ID, _CURRENT_CUSTOMER_ID
+    global _CURRENT_THREAD_ID, _CURRENT_PATIENT_ID
     _CURRENT_THREAD_ID = thread_id
-    _CURRENT_CUSTOMER_ID = inferred_customer or default_customer
+    _CURRENT_PATIENT_ID = inferred_patient or default_patient
 
     llm_response = call_llm(convo).result()
 

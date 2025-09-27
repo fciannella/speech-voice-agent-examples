@@ -55,6 +55,7 @@ WORKDIR /app/examples/voice_agent_webrtc_langgraph
 
 # Dependencies
 RUN uv sync --frozen
+# RUN uv sync
 # Install all agent requirements recursively into the project's virtual environment
 # RUN if [ -d "agents" ]; then \
 #     find agents -type f -name "requirements.txt" -print0 | xargs -0 -I {} uv pip install -r "{}"; \
