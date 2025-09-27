@@ -66,6 +66,71 @@ pcs_map: dict[str, SmallWebRTCConnection] = {}
 contexts_map: dict[str, OpenAILLMContext] = {}
 
 
+# Helper: Build ICE servers for client (browser) using Twilio token if configured
+def _build_client_ice_servers() -> list[dict]:
+    # Prefer Twilio dynamic credentials
+    sid = os.getenv("TWILIO_ACCOUNT_SID")
+    tok = os.getenv("TWILIO_AUTH_TOKEN")
+    if sid and tok:
+        try:
+            # Import lazily to avoid hard dependency when not configured
+            from twilio.rest import Client  # type: ignore
+
+            client = Client(sid, tok)
+            token = client.tokens.create()
+            servers: list[dict] = []
+            # Twilio may return either 'ice_servers' with 'url' or 'urls'
+            for s in getattr(token, "ice_servers", []) or []:
+                url_val = s.get("urls") if isinstance(s, dict) else getattr(s, "urls", None)
+                if not url_val:
+                    url_val = s.get("url") if isinstance(s, dict) else getattr(s, "url", None)
+                entry: dict = {"urls": url_val}
+                u = s.get("username") if isinstance(s, dict) else getattr(s, "username", None)
+                c = s.get("credential") if isinstance(s, dict) else getattr(s, "credential", None)
+                if u:
+                    entry["username"] = u
+                if c:
+                    entry["credential"] = c
+                if entry.get("urls"):
+                    servers.append(entry)
+            # Always include a public STUN fallback
+            servers.append({"urls": "stun:stun.l.google.com:19302"})
+            return servers
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Twilio TURN fetch failed, falling back to env/static: {e}")
+    # Static env fallback
+    servers: list[dict] = []
+    turn_url = os.getenv("TURN_SERVER_URL") or os.getenv("TURN_URL")
+    turn_user = os.getenv("TURN_USERNAME") or os.getenv("TURN_USER")
+    turn_pass = os.getenv("TURN_PASSWORD") or os.getenv("TURN_PASS")
+    if turn_url:
+        server: dict = {"urls": turn_url}
+        if turn_user:
+            server["username"] = turn_user
+        if turn_pass:
+            server["credential"] = turn_pass
+        servers.append(server)
+    servers.append({"urls": "stun:stun.l.google.com:19302"})
+    return servers
+
+
+# Helper: Convert client ICE dicts to server IceServer objects
+def _build_server_ice_servers() -> list[IceServer]:
+    out: list[IceServer] = []
+    for s in _build_client_ice_servers():
+        urls = s.get("urls")
+        username = s.get("username", "")
+        credential = s.get("credential", "")
+        # urls may be a list or a string. Normalize to list for safety.
+        if isinstance(urls, list):
+            for u in urls:
+                out.append(IceServer(urls=u, username=username, credential=credential))
+        elif isinstance(urls, str) and urls:
+            out.append(IceServer(urls=urls, username=username, credential=credential))
+    return out
+
+
+# Backward-compatible static servers (unused when Twilio configured)
 ice_servers = (
     [
         IceServer(
@@ -392,7 +457,9 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.info(f"Reusing existing connection for pc_id: {pc_id}")
             await pipecat_connection.renegotiate(sdp=request["sdp"], type=request["type"])
         else:
-            pipecat_connection = SmallWebRTCConnection(ice_servers)
+            # Build dynamic servers (Twilio or env) for new connections
+            dynamic_servers = _build_server_ice_servers()
+            pipecat_connection = SmallWebRTCConnection(dynamic_servers if dynamic_servers else ice_servers)
             await pipecat_connection.initialize(sdp=request["sdp"], type=request["type"])
 
             @pipecat_connection.event_handler("closed")
@@ -450,26 +517,18 @@ async def get_prompt():
 # RTC config endpoint must be registered before mounting static at "/"
 @app.get("/rtc-config")
 async def rtc_config():
-    """Expose browser RTC ICE configuration based on environment variables.
+    """Expose browser RTC ICE configuration based on environment variables or Twilio.
 
-    Reads TURN_SERVER_URL, TURN_USERNAME, TURN_PASSWORD and returns a structure
-    consumable by the browser: { "iceServers": [ { urls, username?, credential? } ] }.
-    Always includes a public STUN as a fallback.
+    Uses Twilio dynamic TURN credentials when TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN are set.
+    Falls back to TURN_* env vars. Always includes a public STUN fallback.
     """
-    ice_servers: list[dict] = []
-    turn_url = os.getenv("TURN_SERVER_URL") or os.getenv("TURN_URL")
-    turn_user = os.getenv("TURN_USERNAME") or os.getenv("TURN_USER")
-    turn_pass = os.getenv("TURN_PASSWORD") or os.getenv("TURN_PASS")
-    if turn_url:
-        server: dict = {"urls": turn_url}
-        if turn_user:
-            server["username"] = turn_user
-        if turn_pass:
-            server["credential"] = turn_pass
-        ice_servers.append(server)
-    # Public STUN fallback to aid connectivity when TURN is not provided
-    ice_servers.append({"urls": "stun:stun.l.google.com:19302"})
-    return {"iceServers": ice_servers}
+    try:
+        servers = _build_client_ice_servers()
+        return {"iceServers": servers}
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"rtc-config dynamic build failed: {e}")
+        # Final safe fallback
+        return {"iceServers": [{"urls": "stun:stun.l.google.com:19302"}]}
 
 
 # Serve static UI (if bundled) after API/WebSocket routes so they still take precedence
