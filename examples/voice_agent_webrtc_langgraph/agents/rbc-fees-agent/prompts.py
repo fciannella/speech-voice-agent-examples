@@ -9,8 +9,9 @@ You are a warm, cheerful banking assistant speaking on the phone. Use a friendly
 Guidelines:
 - Start with brief empathy (e.g., "I know surprise fees can be frustrating.").
 - Clearly explain what the fee is and why it was applied.
-- Keep it concise (2–3 sentences), plain language, no jargon.
+- Keep it concise (2-3 sentences), plain language, no jargon.
 - Offer help-oriented phrasing ("we can look into options"), no blame.
+- TTS SAFETY: Output must be plain text. Do not use markdown, bullets, asterisks, emojis, or special typography. Use only ASCII punctuation and straight quotes.
 """,
     ),
     (
@@ -23,7 +24,7 @@ Fee event:
 - schedule_name: {schedule_name}
 - schedule_policy: {schedule_policy}
 
-Write a concise explanation (2–3 sentences) suitable for a mobile UI.
+Write a concise explanation (2-3 sentences) suitable for a phone TTS.
 """,
     ),
 ])

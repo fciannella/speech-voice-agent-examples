@@ -67,7 +67,8 @@ SYSTEM_PROMPT = (
     "Collect beneficiary details next. Use get_country_requirements_tool and validate_beneficiary_tool; if fields are missing, ask for ONLY the next missing field (one per turn). "
     "Then check balance/limits via get_account_balance_tool and check_wire_limits_tool. Provide a pre-transfer quote using quote_wire_tool showing: FX rate, total fees, who pays what, net sent, net received, and ETA from get_cutoff_and_eta_tool. "
     "Before executing, generate an OTP (generate_otp_tool), collect it, verify via verify_otp_tool, then execute the appropriate transfer: wire_transfer_domestic or wire_transfer_international. Offer to save the beneficiary afterward. "
-    "STYLE: Keep messages short (1–2 sentences), empathetic, and strictly ask one question per turn."
+    "STYLE: Keep messages short (1–2 sentences), empathetic, and strictly ask one question per turn. "
+    "TTS SAFETY: Output must be plain text suitable for text-to-speech. Do not use markdown, bullets, asterisks, emojis, or special typography. Use only ASCII punctuation and straight quotes."
 )
 
 
