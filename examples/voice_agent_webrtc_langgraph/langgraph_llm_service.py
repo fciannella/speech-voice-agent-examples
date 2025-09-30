@@ -33,6 +33,30 @@ from pipecat.services.openai.llm import OpenAILLMService
 
 load_dotenv()
 
+# TTS sanitize helper: normalize curly quotes/dashes and non-breaking spaces to ASCII
+def _tts_sanitize(text: str) -> str:
+    try:
+        if not isinstance(text, str):
+            text = str(text)
+        replacements = {
+            "\u2018": "'",  # left single quote
+            "\u2019": "'",  # right single quote / apostrophe
+            "\u201C": '"',   # left double quote
+            "\u201D": '"',   # right double quote
+            "\u00AB": '"',   # left angle quote
+            "\u00BB": '"',   # right angle quote
+            "\u2013": "-",  # en dash
+            "\u2014": "-",  # em dash
+            "\u2026": "...",# ellipsis
+            "\u00A0": " ",  # non-breaking space
+            "\u202F": " ",  # narrow no-break space
+        }
+        for k, v in replacements.items():
+            text = text.replace(k, v)
+        return text
+    except Exception:
+        return text
+
 class LangGraphLLMService(OpenAILLMService):
     """Pipecat LLM service that delegates responses to a LangGraph agent.
 
@@ -184,7 +208,7 @@ class LangGraphLLMService(OpenAILLMService):
                             self._emitted_texts.clear()
                         if part_text not in self._emitted_texts:
                             self._emitted_texts.add(part_text)
-                            await self.push_frame(LLMTextFrame(part_text))
+                            await self.push_frame(LLMTextFrame(_tts_sanitize(part_text)))
 
                 # Final value-style events (values mode)
                 if event == "values":
@@ -204,7 +228,7 @@ class LangGraphLLMService(OpenAILLMService):
                             self._emitted_texts.clear()
                         # Emit final explanation as its own message
                         await self.push_frame(LLMFullResponseStartFrame())
-                        await self.push_frame(LLMTextFrame(final_text))
+                        await self.push_frame(LLMTextFrame(_tts_sanitize(final_text)))
                         await self.push_frame(LLMFullResponseEndFrame())
 
                 # Messages mode: look for an array of messages
@@ -227,7 +251,7 @@ class LangGraphLLMService(OpenAILLMService):
                                     self._emitted_texts.clear()
                                 if content not in self._emitted_texts:
                                     self._emitted_texts.add(content)
-                                    await self.push_frame(LLMTextFrame(content))
+                                    await self.push_frame(LLMTextFrame(_tts_sanitize(content)))
                     except Exception as exc:  # noqa: BLE001
                         logger.debug(f"LangGraph messages parsing error: {exc}")
                 # If payload is a plain string, emit it
@@ -240,7 +264,7 @@ class LangGraphLLMService(OpenAILLMService):
                             self._emitted_texts.clear()
                         if txt not in self._emitted_texts:
                             self._emitted_texts.add(txt)
-                            await self.push_frame(LLMTextFrame(txt))
+                            await self.push_frame(LLMTextFrame(_tts_sanitize(txt)))
         except Exception as exc:  # noqa: BLE001
             logger.error(f"LangGraph stream error: {exc}")
 
