@@ -369,7 +369,13 @@ def authenticate_user_wire(session_id: str, customer_id: Optional[str], full_nam
         dob_ok = (user_dob_norm is not None) and (user_dob_norm == prof_dob_norm)
         ssn_ok = str(session.get("ssn_last4") or "") == str(prof.get("ssn_last4") or "")
         def _norm(x: Optional[str]) -> str:
-            return (x or "").strip().lower()
+            # Extract only the core answer, removing common phrases
+            s = (x or "").strip().lower()
+            # Remove common prefixes that users might add
+            for prefix in ["my favorite color is ", "my favorite ", "it is ", "it's ", "the answer is "]:
+                if s.startswith(prefix):
+                    s = s[len(prefix):].strip()
+            return s
         secret_ok = _norm(session.get("secret")) == _norm(prof.get("secret_answer"))
         if dob_ok and (ssn_ok or secret_ok):
             ok = True

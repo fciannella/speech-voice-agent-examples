@@ -22,6 +22,7 @@ from langchain_core.messages import (
 
 try:
     from . import tools as hc_tools  # type: ignore
+    from . import prompts as hc_prompts  # type: ignore
 except Exception:
     import importlib.util as _ilu
     _dir = os.path.dirname(__file__)
@@ -30,6 +31,11 @@ except Exception:
     hc_tools = _ilu.module_from_spec(_spec)  # type: ignore
     assert _spec and _spec.loader
     _spec.loader.exec_module(hc_tools)  # type: ignore
+    _prompts_path = os.path.join(_dir, "prompts.py")
+    _spec_prompts = _ilu.spec_from_file_location("healthcare_agent_prompts", _prompts_path)
+    hc_prompts = _ilu.module_from_spec(_spec_prompts)  # type: ignore
+    assert _spec_prompts and _spec_prompts.loader
+    _spec_prompts.loader.exec_module(hc_prompts)  # type: ignore
 
 # Aliases for tool functions
 find_patient = hc_tools.find_patient
@@ -47,19 +53,8 @@ find_customer_by_name = None  # not used
 
 """ReAct agent entrypoint and system prompt."""
 
-
-SYSTEM_PROMPT = (
-    "You are a compassionate 24/7 telehealth nurse for existing patients. "
-    "Begin with a warm, concise greeting and ask for the caller's full name. "
-    "IDENTITY IS MANDATORY: Before accessing any records, verify identity using date of birth (any format; you normalize) and EITHER MRN last-4 OR the secret answer. If a secret question is available, read it verbatim and collect the answer. "
-    "NEVER claim the caller is verified unless verification returns verified=true. If not verified, ask ONLY for the next missing field and verify again. "
-    "AFTER VERIFIED: Ask ONE question at a time. Gather chief complaint and symptoms in plain language. Screen for common red flags (severe/worst-ever, head injury, weakness/numbness, vision changes, seizure, stiff neck, high fever). If any red flag is present, clearly advise urgent evaluation. "
-    "Use a calm, empathetic tone and keep responses short (1–2 sentences). "
-    "If no red flags, provide brief self-care guidance (hydration, rest, acetaminophen dose guidance when appropriate) and offer to book a telehealth appointment with available providers. "
-    "Confirm preferred pharmacy for prescriptions if needed. "
-    "Always speak clearly and avoid medical jargon. "
-    "TTS SAFETY: Output must be plain text suitable for text-to-speech. Do NOT use markdown, bullets, asterisks, emojis, or special typography. Use only ASCII punctuation and straight quotes (use you're, don't)."
-)
+# Import system prompt from prompts module
+SYSTEM_PROMPT = hc_prompts.HEALTHCARE_SYSTEM_PROMPT
 
 
 _MODEL_NAME = os.getenv("REACT_MODEL", os.getenv("CLARIFY_MODEL", "gpt-4o"))
