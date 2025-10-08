@@ -1,0 +1,33 @@
+.app-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-title, .app-subtitle {
+  margin-left: 24px;
+  margin-bottom: 0;
+}
+
+.app-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-around;
+}
+
+.app-stage-section {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+.app-stage-section.top {
+  flex: 2;
+}
+
+.app-stage-section.bottom {
+  flex: 1;
+  background: var(--bg-secondary);
+}

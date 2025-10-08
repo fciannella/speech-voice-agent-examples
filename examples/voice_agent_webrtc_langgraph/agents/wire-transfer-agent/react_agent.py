@@ -50,8 +50,7 @@ generate_otp_tool = wire_tools.generate_otp_tool
 verify_otp_tool = wire_tools.verify_otp_tool
 wire_transfer_domestic = wire_tools.wire_transfer_domestic
 wire_transfer_international = wire_tools.wire_transfer_international
-
-find_customer_by_name = None  # not used for wire agent; tools expose find_customer
+find_customer_by_name = wire_tools.find_customer_by_name
 
 
 """ReAct agent entrypoint and system prompt."""
@@ -60,8 +59,10 @@ find_customer_by_name = None  # not used for wire agent; tools expose find_custo
 SYSTEM_PROMPT = (
     "You are a warm, cheerful banking assistant helping a customer send a wire transfer (domestic or international). "
     "Start with a brief greeting and very short small talk. Then ask for the caller's full name. "
-    "IDENTITY IS MANDATORY: Before ANY account lookups or wire questions, you MUST call verify_identity. Ask for date of birth (customer can use any format; you normalize) and EITHER SSN last-4 OR the secret answer. If verify_identity returns a secret question, read it verbatim and collect the answer. "
+    "CUSTOMER LOOKUP: After receiving the customer's name, thank them and call find_customer with their first and last name to get their customer_id. If find_customer returns an empty result ({}), politely ask the customer to confirm their full name spelling or offer to look them up by other details. Do NOT proceed to asking for date of birth if you don't have a valid customer_id. "
+    "IDENTITY IS MANDATORY: Once you have a customer_id from find_customer, you MUST call verify_identity. Thank the customer for their name, then ask for date of birth (customer can use any format; you normalize) and EITHER SSN last-4 OR the secret answer. If verify_identity returns a secret question, read it verbatim and collect the answer. "
     "NEVER claim the customer is verified unless the verify_identity tool returned verified=true. If not verified, ask ONLY for the next missing field and call verify_identity again. Do NOT proceed to wire details until verified=true. "
+    "IMPORTANT: Once verified=true is returned from verify_identity, DO NOT ask for identity verification again. The customer is verified for the entire session. Proceed directly to OTP verification when ready to execute the transfer. "
     "AFTER VERIFIED: Ask ONE question at a time, in this order, waiting for the user's answer each time: (1) wire type (DOMESTIC or INTERNATIONAL); (2) source account (last-4 or picker); (3) amount (with source currency); (4) destination country/state; (5) destination currency preference; (6) who pays fees (OUR/SHA/BEN). Keep each turn to a single, concise prompt. Do NOT re-ask for fields already provided; instead, briefly summarize known details and ask only for the next missing field. "
     "If destination currency differs from source, call get_exchange_rate_tool and state the applied rate and converted amount. "
     "Collect beneficiary details next. Use get_country_requirements_tool and validate_beneficiary_tool; if fields are missing, ask for ONLY the next missing field (one per turn). "
@@ -323,8 +324,8 @@ def agent(messages: List[BaseMessage], previous: List[BaseMessage] | None, confi
     prev_list = list(previous or [])
     new_list = list(messages or [])
     convo: List[BaseMessage] = prev_list + new_list
-    # Trim to avoid context bloat
-    convo = _trim_messages(convo, max_messages=int(os.getenv("RBC_FEES_MAX_MSGS", "40")))
+    # Trim to avoid context bloat (increased from 40 to 60 to preserve verification state in long conversations)
+    convo = _trim_messages(convo, max_messages=int(os.getenv("RBC_FEES_MAX_MSGS", "60")))
     # Sanitize to avoid orphan tool messages after trimming
     convo = _sanitize_conversation(convo)
     thread_id = _get_thread_id(config, new_list)

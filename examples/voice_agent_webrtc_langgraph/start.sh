@@ -1,11 +1,15 @@
 #!/bin/sh
 set -eu
 
+# Default to voice_agent_webrtc_langgraph if EXAMPLE_NAME is not set
+EXAMPLE_NAME="${EXAMPLE_NAME:-voice_agent_webrtc_langgraph}"
+EXAMPLE_PATH="/app/examples/${EXAMPLE_NAME}"
+
 # Optionally load a local .env next to this example if present
-if [ -f "/app/examples/voice_agent_webrtc_langgraph/.env" ]; then
+if [ -f "${EXAMPLE_PATH}/.env" ]; then
     # shellcheck disable=SC1091
     set -a
-    . /app/examples/voice_agent_webrtc_langgraph/.env
+    . "${EXAMPLE_PATH}/.env"
     set +a
 fi
 
@@ -16,7 +20,7 @@ if [ -n "${ZERO_SHOT_AUDIO_PROMPT_URL:-}" ]; then
             ZERO_SHOT_AUDIO_PROMPT_URL="${ZERO_SHOT_AUDIO_PROMPT_URL}?raw=1"
             ;;
     esac
-    PROMPT_TARGET="${ZERO_SHOT_AUDIO_PROMPT:-/app/examples/voice_agent_webrtc_langgraph/audio_prompt.wav}"
+    PROMPT_TARGET="${ZERO_SHOT_AUDIO_PROMPT:-${EXAMPLE_PATH}/audio_prompt.wav}"
     mkdir -p "$(dirname "$PROMPT_TARGET")"
     if [ ! -f "$PROMPT_TARGET" ]; then
         echo "Downloading ZERO_SHOT_AUDIO_PROMPT from $ZERO_SHOT_AUDIO_PROMPT_URL"
@@ -30,7 +34,7 @@ fi
 # All dependencies and langgraph CLI are installed at build time
 
 # Start langgraph dev from within the internal agents directory (background)
-LANGGRAPH_DIR="/app/examples/voice_agent_webrtc_langgraph/agents"
+LANGGRAPH_DIR="${EXAMPLE_PATH}/agents"
 LANGGRAPH_PID=""
 if [ -d "$LANGGRAPH_DIR" ]; then
     LG_HOST="${LANGGRAPH_HOST:-0.0.0.0}"
@@ -40,7 +44,7 @@ if [ -d "$LANGGRAPH_DIR" ]; then
 fi
 
 # Run the voice agent app in background
-cd /app/examples/voice_agent_webrtc_langgraph
+cd "${EXAMPLE_PATH}"
 uv run pipeline.py &
 PIPELINE_PID=$!
 

@@ -35,7 +35,7 @@ Optional but useful:
 - Starts the Pipecat pipeline (`pipeline.py`) exposing:
   - HTTP: `http://<host>:7860` (health, RTC config)
   - WebSocket: `ws://<host>:7860/ws` (audio + transcripts)
-- Serves the built UI at `http://<host>:9000/` (via Docker).
+  - Static UI: `http://<host>:7860/` (served by FastAPI)
 
 Defaults:
 - ASR: NVIDIA Riva (NIM) via `RIVA_API_KEY` and built-in `NVIDIA_ASR_FUNCTION_ID`
@@ -52,9 +52,32 @@ From `examples/voice_agent_webrtc_langgraph/`:
 docker compose up --build -d
 ```
 
-Then open `http://<machine-ip>:9000/`.
+Then open `http://<machine-ip>:7860/`.
 
-Chrome on http origins: enable “Insecure origins treated as secure” at `chrome://flags/` and add `http://<machine-ip>:9000`.
+Chrome on http origins: enable "Insecure origins treated as secure" at `chrome://flags/` and add `http://<machine-ip>:7860`.
+
+#### Building for Different Examples
+The Dockerfile in the repository root is generalized to work with any example. Use the `EXAMPLE_NAME` build argument to specify which example to use:
+
+**For voice_agent_webrtc_langgraph (default):**
+```bash
+docker build --build-arg EXAMPLE_NAME=voice_agent_webrtc_langgraph -t my-voice-agent .
+docker run -p 7860:7860 --env-file examples/voice_agent_webrtc_langgraph/.env my-voice-agent
+```
+
+**For voice_agent_multi_thread:**
+```bash
+docker build --build-arg EXAMPLE_NAME=voice_agent_multi_thread -t my-voice-agent .
+docker run -p 7860:7860 --env-file examples/voice_agent_multi_thread/.env my-voice-agent
+```
+
+The Dockerfile will automatically:
+- Build the UI for the specified example
+- Copy only the files for that example
+- Set up the correct working directory
+- Configure the start script to run the correct example
+
+**Note:** The UI is served on the same port as the API (7860). The FastAPI app serves both the WebSocket/HTTP endpoints and the static UI files.
 
 ### Option B: Python (local)
 Requires Python 3.12 and `uv`.
@@ -112,6 +135,54 @@ Notes for Magpie Zero‑shot:
 
 ## 5) Troubleshooting
 - Healthcheck: `curl -f http://localhost:7860/get_prompt`
-- If the UI can’t access the mic on http, use the Chrome flag above or host the UI via HTTPS.
+- If the UI can't access the mic on http, use the Chrome flag above or host the UI via HTTPS.
 - For NAT/firewall issues, configure TURN or provide Twilio credentials.
 
+
+## 6) Multi-threaded Voice Agent (voice_agent_multi_thread)
+
+The `voice_agent_multi_thread` example includes a non-blocking multi-threaded agent implementation that allows users to continue conversing while long-running operations execute in the background.
+
+### Build the Docker image:
+```bash
+docker build -t voice-agent-multi-thread .
+```
+
+### Run the container:
+```bash
+docker run -d --name voice-agent-multi-thread \
+  -p 2024:2024 \
+  -p 7862:7860 \
+  --env-file examples/voice_agent_multi_thread/.env \
+  voice-agent-multi-thread
+```
+
+Then access:
+- **LangGraph API**: `http://localhost:2024`
+- **Web UI**: `http://localhost:7862`
+- **Pipeline WebSocket**: `ws://localhost:7862/ws`
+
+The multi-threaded agent automatically enables for `telco-agent` and `wire-transfer-agent`, allowing the secondary thread to handle status checks and interim conversations while the main thread processes long-running tools.
+
+### Stop and remove the container:
+```bash
+docker stop voice-agent-multi-thread && docker rm voice-agent-multi-thread
+```
+
+
+## 7) Manual Docker Commands (voice_agent_webrtc_langgraph)
+
+If you prefer manual Docker commands instead of docker-compose:
+
+```bash
+docker build -t ace-voice-webrtc:latest \
+  -f examples/voice_agent_webrtc_langgraph/Dockerfile \
+  .
+
+docker run --name ace-voice-webrtc -d \
+  -p 7860:7860 \
+  -p 2024:2024 \
+  --env-file examples/voice_agent_webrtc_langgraph/.env \
+  -e LANGGRAPH_ASSISTANT=healthcare-agent \
+  ace-voice-webrtc:latest
+```
