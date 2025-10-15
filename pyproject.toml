@@ -2,7 +2,7 @@
 name = "nvidia-pipecat"
 version = "0.2.0"
 description = "NVIDIA ACE Pipecat SDK"
-readme = "NVIDIA_PIPECAT.md"
+readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
     { name = "NVIDIA ACE", email = "ace-dev@exchange.nvidia.com" }

@@ -51,7 +51,7 @@ WORKDIR /app
 
 # App files
 COPY --chown=user pyproject.toml uv.lock \
-     LICENSE README.md NVIDIA_PIPECAT.md \
+     LICENSE README.md \
      ./
 COPY --chown=user src/ ./src/
 COPY --chown=user examples/${EXAMPLE_NAME} ./examples/${EXAMPLE_NAME}

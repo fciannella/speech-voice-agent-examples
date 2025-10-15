@@ -11,5 +11,6 @@ docling
 pymongo
 yt_dlp
 requests
-protobuf==6.31.1
+# protobuf==6.31.1
+protobuf
 twilio
