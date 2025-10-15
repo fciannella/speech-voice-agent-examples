@@ -145,7 +145,7 @@ The `voice_agent_multi_thread` example includes a non-blocking multi-threaded ag
 
 ### Build the Docker image:
 ```bash
-docker build -t voice-agent-multi-thread .
+docker build --build-arg EXAMPLE_NAME=voice_agent_multi_thread -t voice-agent-multi-thread .
 ```
 
 ### Run the container:

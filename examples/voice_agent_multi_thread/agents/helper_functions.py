@@ -22,21 +22,29 @@ def write_status(
         namespace: Namespace tuple for store isolation
         config: Optional runtime config
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     if not isinstance(namespace, tuple):
         try:
             namespace = tuple(namespace)
         except (TypeError, ValueError):
             namespace = (str(namespace),)
     
-    store.put(
-        namespace,
-        "working-tool-status-update",
-        {
-            "tool_name": tool_name,
-            "progress": progress,
-            "status": status,
-        }
-    )
+    try:
+        logger.info(f"📝 write_status: Attempting to write to store: namespace={namespace}, key='working-tool-status-update'")
+        store.put(
+            namespace,
+            "working-tool-status-update",
+            {
+                "tool_name": tool_name,
+                "progress": progress,
+                "status": status,
+            }
+        )
+        logger.info(f"📝 write_status: Successfully called store.put() for {tool_name} at {progress}%")
+    except Exception as e:
+        logger.error(f"❌ write_status FAILED: {e}", exc_info=True)
 
 
 def reset_status(store: BaseStore, namespace: tuple | list) -> None:

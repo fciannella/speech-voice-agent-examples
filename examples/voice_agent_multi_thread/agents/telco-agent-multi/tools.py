@@ -97,8 +97,13 @@ def close_contract_tool(msisdn: str, confirm: bool = False) -> str:
         return json.dumps(telco_logic.close_contract(msisdn, False))
     
     # Long-running operation with progress reporting (following working example pattern)
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"🔥 close_contract_tool STARTING 50-second operation for {msisdn}")
+    
     writer = get_stream_writer()
     writer("Processing your contract closure request. This may take a moment...")
+    logger.info("✅ Stream writer message sent")
     
     tool_name = "close_contract_tool"
     steps = 10
@@ -107,12 +112,16 @@ def close_contract_tool(msisdn: str, confirm: bool = False) -> str:
     config = ensure_config()
     namespace = config["configurable"]["namespace_for_memory"]
     server_store = get_store()
+    logger.info(f"📦 Got store and namespace: {namespace}")
     
     for i in range(1, steps + 1):
+        logger.info(f"⏱️  Step {i}/{steps} - sleeping {interval_seconds}s...")
         time.sleep(interval_seconds)
+        logger.info(f"⏱️  Step {i}/{steps} - sleep complete, writing status...")
         pct = (i * 100) // steps
         status = "running"
         write_status(tool_name, pct, status, server_store, namespace, config)
+        logger.info(f"✅ Status written: {pct}% - {status}")
     
     # Execute actual closure
     result = telco_logic.close_contract(msisdn, True)

@@ -261,39 +261,60 @@ def schedule_appointment_tool(provider_id: str, slot_iso: str, patient_id: str |
 def triage_symptoms_tool(patient_id: str | None, symptoms_text: str) -> str:
     """Analyze patient symptoms using clinical triage rules to determine urgency and guidance.
     
-    WHEN TO CALL: After collecting chief complaint and symptoms from patient. This is a CORE tool.
+    WHEN TO CALL: ONLY after thorough symptom assessment. Ask clarifying questions about red flags BEFORE calling this tool.
+    
+    CRITICAL: This tool uses simple keyword matching, so be VERY CAREFUL with your symptoms_text.
+    - Only include symptoms that ARE PRESENT
+    - Do NOT mention symptoms that are absent (saying "no numbness" will trigger the "numbness" keyword!)
+    - Instead, after screening for red flags, ONLY list positive findings in symptoms_text
+    - Use descriptive language: "mild headache for 2 days, gradual onset, no concerning features"
+    - If patient denies all red flags, do NOT list them - just describe the actual complaint
     
     PARAMETERS:
     - patient_id: From find_patient() result (auto-injected if available, used for age-based rules)
-    - symptoms_text: Natural language description of symptoms collected from patient (e.g., "headache and fatigue, no fever")
+    - symptoms_text: Description of PRESENT symptoms only (DO NOT list absent symptoms to avoid false triggers)
+      Good: "mild headache for 2 days, gradual onset, relieved by rest"
+      Good: "moderate headache with fever 101F, started yesterday"
+      Bad: "headache, no numbness, no confusion" (will trigger "numbness" and "confusion" keywords!)
+      Bad: "headache" (too vague, lacks detail for proper triage)
     
     RETURNS: JSON with:
     - "risk": "urgent" | "soon" | "self_care" - Urgency level
     - "advice": "Try rest, hydration..." - Clinical guidance to share with patient
-    - "red_flags": ["stiff neck", "high fever"] - List of concerning symptoms detected (empty array if none)
+    - "red_flags": ["stiff neck", "high fever"] - Keywords detected (may include false positives!)
     - "rule": "Headache - typical" - Internal rule name that matched
     
     RISK LEVELS:
-    - "urgent": Emergency - direct to ER/911 immediately
+    - "urgent": Potential emergency (but verify with clinical judgment)
     - "soon": Schedule appointment within 1-2 days
     - "self_care": Home care with OTC medications, monitor symptoms
     
-    WHAT TO DO WITH RESULTS:
-    - If risk="urgent" AND red_flags present: "This may require urgent evaluation. Please go to the nearest ER or call 911."
-    - If risk="soon": Give brief advice, then offer appointment: "I recommend scheduling within a day or two."
-    - If risk="self_care": Give the advice verbatim, check patient profile for medication safety, offer follow-up appointment
+    WHAT TO DO WITH RESULTS (USE CLINICAL JUDGMENT):
+    - If risk="urgent" AND red_flags has items AND patient confirmed those symptoms: Direct to ER/911
+    - If risk="urgent" BUT patient explicitly denied red flag symptoms: FALSE POSITIVE - schedule appointment instead
+    - If risk="soon": Give advice and offer appointment within 1-2 days
+    - If risk="self_care": Give advice, check allergies/meds for safety, offer optional follow-up
     - ALWAYS tailor advice based on patient's allergies and current medications from get_patient_profile_tool()
+    - Remember: Most common symptoms (headache, fever, fatigue) are NOT emergencies
     
-    EXAMPLE 1 (URGENT):
-    → Call triage_symptoms_tool(symptoms_text="severe chest pain and shortness of breath")
-    ← Returns: {"risk": "urgent", "advice": "Chest pain can be serious. Please call emergency services now.", "red_flags": ["chest pain"]}
-    → Say: "Chest pain can be serious. Please call 911 now or go to the nearest emergency room."
+    EXAMPLE 1 (TRUE URGENT):
+    Conversation: Patient says "severe crushing chest pain, sweating, short of breath"
+    → Call triage_symptoms_tool(symptoms_text="severe chest pain with sweating and shortness of breath")
+    ← Returns: {"risk": "urgent", "red_flags": ["chest pain"]}
+    → Clinical judgment: Patient confirmed severe chest pain = TRUE URGENT
+    → Say: "This sounds serious. Please call 911 now or go to the nearest emergency room."
     
-    EXAMPLE 2 (SELF-CARE):
-    → Call triage_symptoms_tool(symptoms_text="mild headache and tired, no fever or neck stiffness")
-    ← Returns: {"risk": "self_care", "advice": "Try rest, hydration, and acetaminophen as directed...", "red_flags": []}
-    Patient profile shows: allergies=["Penicillin"], medications=[{"name": "Acetaminophen", "otc": true}]
-    → Say: "Since you're already on acetaminophen as needed and have no concerning symptoms, try rest and hydration. Would you like a follow-up appointment?"
+    EXAMPLE 2 (AVOIDING FALSE POSITIVES):
+    Conversation: You ask "Any severe symptoms like confusion, weakness, or numbness?" Patient says "No, none of those"
+    → Call triage_symptoms_tool(symptoms_text="mild headache for 2 days, gradual onset, relieved with rest")
+    ← Returns: {"risk": "self_care", "red_flags": []}
+    → Say: "Try rest, hydration, and acetaminophen. Would you like a follow-up appointment?"
+    (Note: Did NOT mention "no confusion, no numbness" to avoid triggering those keywords)
+    
+    EXAMPLE 3 (SELF-CARE):
+    → Call triage_symptoms_tool(symptoms_text="low-grade fever 100.5F for 1 day with mild fatigue")
+    ← Returns: {"risk": "self_care", "advice": "Hydration, rest, and acetaminophen can help..."}
+    → Say: "For a low-grade fever, rest and hydration are key. You're already taking acetaminophen as needed, which is safe with your medications."
     """
     return json.dumps(triage_symptoms(patient_id, symptoms_text))
 

@@ -281,14 +281,28 @@ async def run_bot(webrtc_connection, ws: WebSocket, assistant_override: str | No
     selected_assistant = assistant_override or os.getenv("LANGGRAPH_ASSISTANT", "ace-base-agent")
     logger.info(f"Using LangGraph assistant: {selected_assistant}")
 
+    # Determine assistant name (may be UUID, need to fetch graph_id)
+    assistant_name = selected_assistant  # Default to the value we have
+    try:
+        # If it looks like a UUID, fetch the assistant details to get the graph_id
+        if len(selected_assistant) > 30 and "-" in selected_assistant:
+            from langgraph_sdk import get_client
+            langgraph_client = get_client(url=os.getenv("LANGGRAPH_BASE_URL", "http://127.0.0.1:2024"))
+            assistant_info = await langgraph_client.assistants.get(selected_assistant)
+            assistant_name = assistant_info.get("graph_id", selected_assistant)
+            logger.info(f"Resolved assistant UUID to graph_id: {assistant_name}")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"Failed to resolve assistant name, using as-is: {exc}")
+
     # Enable multi-threading for telco agent
-    enable_multi_threading = selected_assistant in ["telco-agent", "wire-transfer-agent"]
+    enable_multi_threading = assistant_name in ["telco-agent", "wire-transfer-agent"]
+    logger.info(f"Multi-threading enabled: {enable_multi_threading} for assistant: {assistant_name}")
     
     llm = LangGraphLLMService(
         base_url=os.getenv("LANGGRAPH_BASE_URL", "http://127.0.0.1:2024"),
         assistant=selected_assistant,
         user_email=os.getenv("USER_EMAIL", "test@example.com"),
-        stream_mode=os.getenv("LANGGRAPH_STREAM_MODE", "values"),
+        # stream_mode now auto-set based on enable_multi_threading (["values", "custom"] for multi-thread, "values" for single)
         debug_stream=os.getenv("LANGGRAPH_DEBUG_STREAM", "false").lower() == "true",
         enable_multi_threading=enable_multi_threading,
     )

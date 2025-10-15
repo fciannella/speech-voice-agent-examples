@@ -287,3 +287,4 @@ If tests fail, provide:
 3. **Expected behavior** vs **actual behavior**
 4. **Log excerpt** from `app.log` showing tool calls
 5. **Which test scenario** from this guide
+
