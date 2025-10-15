@@ -1,3 +1,15 @@
+---
+title: Voice Agent WebRTC + LangGraph
+emoji: 🎙️
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+suggested_hardware: t4-small
+short_description: Complete voice agent stack with LangGraph, Pipecat, WebRTC, ASR, and TTS
+---
+
 # Voice Agent WebRTC + LangGraph (Quick Start)
 
 This repository includes a complete voice agent stack:
